@@ -135,9 +135,9 @@ describe('BannxTrigger deliveries', async () => {
 	const raw = JSON.stringify(body);
 	const sign = (s: string) => `sha256=${createHmac('sha256', s).update(raw).digest('hex')}`;
 
-	const hookCtx = (headers: Record<string, string>, templateId = '') => {
+	const hookCtx = (headers: Record<string, string>, templateId = '', staticData: Record<string, unknown> = { webhookId: 'h1', webhookSecret: secret }) => {
 		const status = vi.fn(() => ({ send: vi.fn() }));
-		const ctx = makeContext({ event: 'render.completed', templateId: { mode: 'list', value: templateId } }, { staticData: { webhookId: 'h1', webhookSecret: secret } });
+		const ctx = makeContext({ event: 'render.completed', templateId: { mode: 'list', value: templateId } }, { staticData });
 		return Object.assign(ctx, {
 			status,
 			getRequestObject: () => ({ rawBody: Buffer.from(raw) }),
@@ -159,6 +159,13 @@ describe('BannxTrigger deliveries', async () => {
 			expect(res).toEqual({ noWebhookResponse: true });
 			expect(ctx.status).toHaveBeenCalledWith(401);
 		}
+	});
+
+	it('answers 401 when no secret is stored, even to a signed delivery', async () => {
+		const ctx = hookCtx({ 'x-webhook-signature': sign(secret) }, '', { webhookId: 'h1' });
+		const res = await new BannxTrigger().webhook.call(ctx as never);
+		expect(res).toEqual({ noWebhookResponse: true });
+		expect(ctx.status).toHaveBeenCalledWith(401);
 	});
 
 	it('ignores renders of other templates', async () => {

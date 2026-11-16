@@ -132,14 +132,15 @@ export class BannxTrigger implements INodeType {
 		const body = this.getBodyData() as IDataObject;
 		const secret = state.webhookSecret as string | undefined;
 
-		if (secret) {
-			const raw = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(body);
-			const header = this.getHeaderData()['x-webhook-signature'] as string | undefined;
-			if (!verifySignature(secret, raw, header)) {
-				const res = this.getResponseObject();
-				res.status(401).send('Invalid signature');
-				return { noWebhookResponse: true };
-			}
+		// Fail closed: create() always stores a secret, so a delivery without
+		// one to check against is never trusted. Re-activating the workflow
+		// subscribes again with a fresh secret.
+		const raw = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(body);
+		const header = this.getHeaderData()['x-webhook-signature'] as string | undefined;
+		if (!secret || !verifySignature(secret, raw, header)) {
+			const res = this.getResponseObject();
+			res.status(401).send('Invalid signature');
+			return { noWebhookResponse: true };
 		}
 
 		const event = this.getNodeParameter('event') as string;
